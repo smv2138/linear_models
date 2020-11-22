@@ -110,3 +110,45 @@ broom::tidy(fit) ## betas are different
 broom::glance(fit) ## these values are the same
 ```
 
+
+## Diagnositcs 
+
+Residuals 
+```{r}
+## added a column for residual values (how far off the fitted model was from the real data)
+nyc_airbnb %>% 
+  modelr::add_residuals(fit) %>% 
+    ggplot(aes(x = borough, y = resid)) +
+    geom_violin() +
+    ylim(-500, 1500) ##code to zoom in
+## bad residuals for manhattan and brooklyn
+
+nyc_airbnb %>% 
+  modelr::add_residuals(fit) %>% 
+  ggplot(aes(x = stars, y = resid)) +
+  geom_point() +
+  facet_wrap(. ~borough)
+## distribution of residuals gets bigger as the star count goes up 
+
+```
+
+
+## Hypothesis test
+
+This does t tests by defaut
+```{r}
+fit %>% 
+  broom::tidy()
+```
+
+But what about the significance of all of "borough" 
+F test or ANOVA
+
+```{r}
+fit_null = lm(price ~ stars, data = nyc_airbnb)
+fit_alt = lm(price ~ stars + borough, data = nyc_airbnb)
+
+anova(fit_null, fit_alt) %>% 
+  broom::tidy()
+```
+
