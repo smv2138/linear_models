@@ -96,8 +96,8 @@ lm(y ~ x, data = sim_df_const) %>% broom::tidy()
     ## # A tibble: 2 x 5
     ##   term        estimate std.error statistic   p.value
     ##   <chr>          <dbl>     <dbl>     <dbl>     <dbl>
-    ## 1 (Intercept)     1.99    0.0890      22.4 2.08e- 61
-    ## 2 x               3.00    0.0622      48.2 5.15e-128
+    ## 1 (Intercept)     1.95    0.0909      21.5 1.22e- 58
+    ## 2 x               3.04    0.0614      49.5 1.41e-130
 
 ``` r
 lm(y ~ x, data = sim_df_nonconst) %>% broom::tidy()
@@ -106,8 +106,8 @@ lm(y ~ x, data = sim_df_nonconst) %>% broom::tidy()
     ## # A tibble: 2 x 5
     ##   term        estimate std.error statistic   p.value
     ##   <chr>          <dbl>     <dbl>     <dbl>     <dbl>
-    ## 1 (Intercept)     2.05    0.0865      23.7 1.08e- 65
-    ## 2 x               2.95    0.0605      48.7 6.54e-129
+    ## 1 (Intercept)     2.04    0.0885      23.1 9.60e- 64
+    ## 2 x               2.99    0.0598      49.9 1.99e-131
 
 ## Draw 1 Bootstrap sample
 
@@ -160,5 +160,179 @@ boot_samp(sim_df_nonconst) %>%
     ## # A tibble: 2 x 5
     ##   term        estimate std.error statistic   p.value
     ##   <chr>          <dbl>     <dbl>     <dbl>     <dbl>
-    ## 1 (Intercept)     2.16    0.0858      25.1 4.27e- 70
-    ## 2 x               2.95    0.0596      49.5 1.25e-130
+    ## 1 (Intercept)     2.10    0.108       19.4 1.49e- 51
+    ## 2 x               2.92    0.0657      44.5 3.95e-120
+
+## Many samples and analysis
+
+1000 bootstrap samples drawn with replacement from this dataframe
+
+Ran bootstrap of sample size of 250, 1000 times
+
+``` r
+boot_straps = 
+  tibble(
+    strap_number = 1:1000,
+    strap_sample = rerun(1000, boot_samp(sim_df_nonconst))
+  )
+
+boot_straps %>% pull(strap_sample) %>% .[[1]]
+```
+
+    ## # A tibble: 250 x 3
+    ##         x   error      y
+    ##     <dbl>   <dbl>  <dbl>
+    ##  1 -1.89  -0.738  -4.40 
+    ##  2 -1.89  -0.738  -4.40 
+    ##  3 -1.51   1.08   -1.46 
+    ##  4 -1.18   1.84    0.284
+    ##  5 -1.18   1.84    0.284
+    ##  6 -0.902 -0.527  -1.23 
+    ##  7 -0.902 -0.527  -1.23 
+    ##  8 -0.741  0.405   0.182
+    ##  9 -0.740 -0.0549 -0.275
+    ## 10 -0.674  1.48    1.46 
+    ## # ... with 240 more rows
+
+We have a dataframe (can use iterative analysis methods to analyze this)
+
+Can I run my analysis on these?? YES
+
+We want to fit a regression to each of the 1000 dataframes For each
+regression get the results
+
+``` r
+boot_results = 
+  boot_straps %>%
+  mutate(
+    models = map(.x = strap_sample, ~lm(y ~ x, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_number, results) %>% 
+  unnest(results)
+```
+
+What do I have now? There are 2000 rows because we had 1000 samples and
+for each we have an intercept and a slope estimate Interested in the
+distribution of estimates slope and intercept (we hope that the variance
+are closer to the actual variance)
+
+Took mean of estimate and ed for the intercept and slope. Using
+bootstrap to say, I know linear regression assume constant variance, but
+I know constant variance isn’t the right assumption, so we know whatever
+the regular linear regression says about slope and intercept are not
+true. Bootstrap gives you a way to get a true sd without making any
+assumptions about variance, to get information about uncertainty of the
+slope and interecept
+
+``` r
+boot_results %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+    ## # A tibble: 2 x 3
+    ##   term        mean_est sd_est
+    ##   <chr>          <dbl>  <dbl>
+    ## 1 (Intercept)     2.04 0.0664
+    ## 2 x               2.99 0.0827
+
+Look at the distributions
+
+What this show is: under repeated sampling, this is the actual
+distribution of slopes (not relying on any assumptions)
+
+``` r
+boot_results %>%
+  filter(term == "x") %>% 
+  ggplot(aes(x = estimate)) +
+  geom_density()
+```
+
+<img src="bootstraping_files/figure-gfm/unnamed-chunk-12-1.png" width="90%" />
+
+Construct bootstrap CI CI based on repeated sampling
+
+``` r
+boot_results %>% 
+  group_by(term) %>% 
+  summarize(
+    ci_lower = quantile(estimate, 0.025),
+    ci_upper = quantile(estimate, 0.975)
+  )
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+    ## # A tibble: 2 x 3
+    ##   term        ci_lower ci_upper
+    ##   <chr>          <dbl>    <dbl>
+    ## 1 (Intercept)     1.91     2.17
+    ## 2 x               2.83     3.15
+
+## Bootstrap using `modelr`
+
+Can we simplify anything?
+
+`bootstrap` function in `modelr` tells it you want a bootstrap, and you
+can indicate how many samples you want Creates a resample object, not a
+dataframe
+
+Mean estimates are in the same ball park as when we did it above
+
+``` r
+sim_df_nonconst %>%
+  bootstrap(1000, id = "strap_number") %>% 
+   mutate(
+    models = map(.x = strap, ~lm(y ~ x, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_number, results) %>% 
+  unnest(results) %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+    ## # A tibble: 2 x 3
+    ##   term        mean_est sd_est
+    ##   <chr>          <dbl>  <dbl>
+    ## 1 (Intercept)     2.04 0.0662
+    ## 2 x               2.99 0.0798
+
+Bootstrap works pretty well if your assumptions aren’t met
+(nonconst\_df) But what if the assumptions ARE met (const\_df)? Does it
+still work? Yes\!
+
+``` r
+sim_df_const %>%
+  bootstrap(1000, id = "strap_number") %>% 
+   mutate(
+    models = map(.x = strap, ~lm(y ~ x, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_number, results) %>% 
+  unnest(results) %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+    ## # A tibble: 2 x 3
+    ##   term        mean_est sd_est
+    ##   <chr>          <dbl>  <dbl>
+    ## 1 (Intercept)     1.96 0.0958
+    ## 2 x               3.04 0.0588

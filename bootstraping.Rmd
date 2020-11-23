@@ -111,8 +111,122 @@ boot_samp(sim_df_nonconst) %>%
 ```
 
 
+## Many samples and analysis
+1000 bootstrap samples drawn with replacement from this dataframe
+
+Ran bootstrap of sample size of 250, 1000 times 
+```{r}
+boot_straps = 
+  tibble(
+    strap_number = 1:1000,
+    strap_sample = rerun(1000, boot_samp(sim_df_nonconst))
+  )
+
+boot_straps %>% pull(strap_sample) %>% .[[1]]
+```
+We have a dataframe (can use iterative analysis methods to analyze this)
 
 
+Can I run my analysis on these?? YES
+
+We want to fit a regression to each of the 1000 dataframes 
+For each regression get the results
+```{r}
+boot_results = 
+  boot_straps %>%
+  mutate(
+    models = map(.x = strap_sample, ~lm(y ~ x, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_number, results) %>% 
+  unnest(results)
+  
+```
+
+What do I have now?
+There are 2000 rows because we had 1000 samples and for each we have an intercept and a slope estimate
+Interested in the distribution of estimates slope and intercept (we hope that the variance are closer to the actual variance)
+
+Took mean of estimate and ed for the intercept and slope.
+Using bootstrap to say, I know linear regression assume constant variance, but I know constant variance isn't the right assumption, so we know whatever the regular linear regression says about slope and intercept are not true. 
+Bootstrap gives you a way to get a true sd without making any assumptions about variance, to get information about uncertainty of the slope and interecept 
+```{r}
+boot_results %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+```
+
+
+Look at the distributions
+
+What this show is: under repeated sampling, this is the actual distribution of slopes (not relying on any assumptions)
+```{r}
+boot_results %>%
+  filter(term == "x") %>% 
+  ggplot(aes(x = estimate)) +
+  geom_density()
+```
+
+Construct bootstrap CI
+CI based on repeated sampling
+```{r}
+boot_results %>% 
+  group_by(term) %>% 
+  summarize(
+    ci_lower = quantile(estimate, 0.025),
+    ci_upper = quantile(estimate, 0.975)
+  )
+```
+
+
+## Bootstrap using `modelr` 
+
+Can we simplify anything?
+
+`bootstrap` function in `modelr` tells it you want a bootstrap, and you can indicate how many samples you want 
+Creates a resample object, not a dataframe
+
+Mean estimates are in the same ball park as when we did it above
+```{r}
+sim_df_nonconst %>%
+  bootstrap(1000, id = "strap_number") %>% 
+   mutate(
+    models = map(.x = strap, ~lm(y ~ x, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_number, results) %>% 
+  unnest(results) %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+  
+  
+```
+
+
+Bootstrap works pretty well if your assumptions aren't met (nonconst_df)
+But what if the assumptions ARE met (const_df)? Does it still work?
+Yes!
+```{r}
+sim_df_const %>%
+  bootstrap(1000, id = "strap_number") %>% 
+   mutate(
+    models = map(.x = strap, ~lm(y ~ x, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_number, results) %>% 
+  unnest(results) %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+```
 
 
 
