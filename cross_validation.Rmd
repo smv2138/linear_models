@@ -117,8 +117,82 @@ rmse(wiggle_mod, test_df)
 ```
 
 
+## Cross validation using `modelr` package
+
+This package automates the process of generating a testing and training dataset
+100 cross validation runs
+Drawing mulitple samples from a dataset that already exists
+100 different datasets that sample different stuff from the existing dataset
+```{r}
+cv_df = 
+  crossv_mc(nonlin_df, 100)
+```
+
+What is going on here...
+We can covert any one of those samples into dataframes
+```{r}
+cv_df %>% pull(train) %>% .[[1]] %>% as_tibble()
+cv_df %>% pull(test) %>% .[[1]] %>% as_tibble()
+```
+
+I want list columns of straight dataframes, not resamples
+```{r}
+cv_df =
+  cv_df %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+```
+
+Let's try to fit models and get RMSEs for them
+
+Fit linear models for every element in the training column (100 dataframes)
+Produces a list column with linear models
+map_dbl gives it as a number rather than a list
+```{r}
+cv_df = 
+  cv_df %>% 
+  mutate(
+    linear_mod  = map(.x = train, ~lm(y ~ x, data = .x)),
+    smooth_mod = map(.x = train, ~gam(y ~s(x), data = .x)),
+    wiggly_mod = map(.x = train, ~gam(y ~s(x, k = 30), sp = 10e-6, data = .x))
+  ) %>% 
+  mutate(
+    rmse_linear = map2_dbl(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_smooth = map2_dbl(.x = smooth_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_wiggly = map2_dbl(.x = wiggly_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+```
+
+How do we know which model is the best?
+
+Plotted the distribution over 100 different training sets for 3 different models
+```{r}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_violin()
+```
 
 
-
-
+Commute averages of rmse
+```{r}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  group_by(model) %>% 
+  summarize(avg_rmse = mean(rmse))
+```
 
