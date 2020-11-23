@@ -1,10 +1,10 @@
 ---
-title: "Linear Regression"
+title: "Bootstrapping"
 output: github_document
 ---
 ```{r}
 library(tidyverse)
-library(p8105.datasets)
+library(modelr)
 
 knitr::opts_chunk$set(
   fig.width = 6,
@@ -25,183 +25,91 @@ scale_fill_discrete = scale_fill_viridis_d
 
 ```
 
-## Import Data 
+## Simulate Data
 
 ```{r}
-data("nyc_airbnb")
+n_samp = 250
 
-nyc_airbnb = 
-  nyc_airbnb %>% 
-  mutate(stars = review_scores_location / 2) %>% 
-  rename(
-    borough = neighbourhood_group,
-    neighborhood = neighbourhood) %>% 
-  filter(borough != "Staten Island") %>% 
-  select(price, stars, borough, neighborhood, room_type)
-```
-
-## Fit a model
-How price of rental is related to the stars and borough
-```{r}
-nyc_airbnb %>% 
-  ggplot(aes(x = stars, y = price, color = borough)) +
-  geom_point()
-```
-
-```{r}
-fit = lm(price ~ stars + borough, data = nyc_airbnb)
-```
-
-let's look at the results
-
-```{r, include = FALSE}
-fit
-
-summary(fit)
-
-summary(fit)$coef
-
-fitted.values(fit)
-residuals(fit)
-
-```
-
-Let's look at the results better
-```{r}
-## get AIC and BIC and log likelihood (good when comparing models)
-broom::glance(fit)
-
-## structured as a dataframe 
-broom::tidy(fit) %>% 
-  select(-std.error, -statistic) %>% 
-  mutate(
-    term = str_replace(term, "borough", "Borough: ")
-  ) %>% 
-  knitr::kable(digits = 2)
-```
-
-
-## Be in control of factors
-
-Bronx is the reference group because of alphabetical order
-What is we want the most common one (most number of air bnbs) to be the ref group
-```{r}
-nyc_airbnb = 
-  nyc_airbnb %>% 
-  mutate(
-    borough = fct_infreq(borough),
-    room_type = fct_infreq(room_type)
+sim_df_const = 
+  tibble(
+    x = rnorm(n_samp, 1, 1),
+    error = rnorm(n_samp, 0, 1),
+    y = 2 + 3 * x + error
   )
+
+#new error structure
+sim_df_nonconst = sim_df_const %>% 
+  mutate(
+  error = error * .75 * x,
+  y = 2 + 3 * x + error
+)
 ```
 
-Look at plot again
+Plot the datasets
 
+Shows linear line 
+residuals have constant variance (good for most assumptions of simple linear regression)
 ```{r}
-## Now borough (x axis) is in order of frequency of air bnb
-nyc_airbnb %>% 
-  ggplot(aes(x = stars, y = price, color = borough)) +
-  geom_point()
-```
-
-Look at model again (different ref group - Manhattan is ref group)
-```{r}
-fit = lm(price ~ stars + borough, data = nyc_airbnb)
-broom::tidy(fit) ## betas are different
-broom::glance(fit) ## these values are the same
-```
-
-
-## Diagnositcs 
-
-Residuals 
-```{r}
-## added a column for residual values (how far off the fitted model was from the real data)
-nyc_airbnb %>% 
-  modelr::add_residuals(fit) %>% 
-    ggplot(aes(x = borough, y = resid)) +
-    geom_violin() +
-    ylim(-500, 1500) ##code to zoom in
-## bad residuals for manhattan and brooklyn
-
-nyc_airbnb %>% 
-  modelr::add_residuals(fit) %>% 
-  ggplot(aes(x = stars, y = resid)) +
+sim_df_const %>% 
+  ggplot(aes(x = x, y = y)) +
   geom_point() +
-  facet_wrap(. ~borough)
-## distribution of residuals gets bigger as the star count goes up 
-
+  geom_smooth(method = "lm")
 ```
 
 
-## Hypothesis test
-
-This does t tests by defaut
+Doesn't meet assumptions well 
+Residuals spread out later on (heteroscedasticty)
+Can solve this with a bootstrap
 ```{r}
-fit %>% 
+sim_df_nonconst %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+Fit linear regs for both dataset
+```{r}
+lm(y ~ x, data = sim_df_const) %>% broom::tidy()
+
+lm(y ~ x, data = sim_df_nonconst) %>% broom::tidy()
+```
+
+
+## Draw 1 Bootstrap sample
+Assumptions aren't met in the nonconst data set (understand what the distribution of intercepts are slope are in repeated sampling) - find actual slope and intercept through repeated sample
+We don't trust the CI and the uncertainity estimates that go along with it
+
+`sample_frac` draws a sample of a particular proportion from your dataset (by default with grab a sample that is proportional (1:1) proportion with the size of the dataset)
+We want it to be the same size because CI are very dependent on the sample size
+
+`arrange` because we know the df we're passing through will have an x and y and we want them arranged that way
+```{r}
+boot_samp = function(df) {
+  
+  sample_frac(df, size = 1, replace = TRUE) %>% 
+    arrange(x)
+  
+}
+```
+
+Check if the function works
+
+Some observations are coming in twice 
+Darker points signify that those values appear multiple times in the dataset due to replacement
+```{r}
+boot_samp(sim_df_nonconst) %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm")
+```
+
+Fit a regression with the bootstrap samples
+```{r}
+boot_samp(sim_df_nonconst) %>% 
+  lm(y ~ x, data = .) %>% 
   broom::tidy()
 ```
 
-But what about the significance of all of "borough" 
-F test or ANOVA
-
-```{r}
-fit_null = lm(price ~ stars, data = nyc_airbnb)
-fit_alt = lm(price ~ stars + borough, data = nyc_airbnb)
-
-anova(fit_null, fit_alt) %>% 
-  broom::tidy()
-```
-
-
-## Nest data, fit models
-
-Does the association between stars and price differ by borough?
-
-Interactions - this is formal and complicated
-```{r}
-fit = lm(price ~ stars * borough + room_type * borough, data = nyc_airbnb)
-
-broom::tidy(fit)
-```
-
-This is more exploratory but maybe more easier to understand
-
-```{r}
-nyc_airbnb %>% 
-  nest(data = -borough) %>% 
-  mutate(
-    models = map(data, ~lm(price ~ stars +room_type, data = .x)),
-    results = map(models, broom::tidy)
-  ) %>% 
-  select(-data, -models) %>% 
-  unnest(results) %>% 
-  filter(term != "(Intercept)") %>% ## don't care about intercept
-  select(borough, term, estimate) %>% 
-  pivot_wider(
-    names_from = "borough",
-    values_from = "estimate"
-  )
-```
-
-
-Let's nest even more....
-
-```{r}
-nyc_airbnb %>% 
-  filter(borough == "Manhattan") %>% 
-  nest(data = -neighborhood) %>% 
-  mutate(
-    models = map(data, ~lm(price ~ stars +room_type, data = .x)),
-    results = map(models, broom::tidy)
-  ) %>% 
-  select(-data, -models) %>% 
-  unnest(results) %>% 
-  filter(str_detect(term, "room_type")) %>% 
-  ggplot(aes(x = neighborhood, y = estimate)) +
-  geom_point() +
-  facet_wrap(. ~ term) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
-```
 
 
 
