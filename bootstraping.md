@@ -5,19 +5,20 @@ Bootstrapping
 library(tidyverse)
 ```
 
-    ## -- Attaching packages ------------------------------------------------------------------------------------------------------------------ tidyverse 1.3.0 --
+    ## -- Attaching packages ------------------------------------------------------------------------------------------------------------------- tidyverse 1.3.0 --
 
     ## v ggplot2 3.3.2     v purrr   0.3.4
     ## v tibble  3.0.3     v dplyr   1.0.2
     ## v tidyr   1.1.2     v stringr 1.4.0
     ## v readr   1.3.1     v forcats 0.5.0
 
-    ## -- Conflicts --------------------------------------------------------------------------------------------------------------------- tidyverse_conflicts() --
+    ## -- Conflicts ---------------------------------------------------------------------------------------------------------------------- tidyverse_conflicts() --
     ## x dplyr::filter() masks stats::filter()
     ## x dplyr::lag()    masks stats::lag()
 
 ``` r
 library(modelr)
+library(p8105.datasets)
 
 knitr::opts_chunk$set(
   fig.width = 6,
@@ -96,8 +97,8 @@ lm(y ~ x, data = sim_df_const) %>% broom::tidy()
     ## # A tibble: 2 x 5
     ##   term        estimate std.error statistic   p.value
     ##   <chr>          <dbl>     <dbl>     <dbl>     <dbl>
-    ## 1 (Intercept)     1.95    0.0909      21.5 1.22e- 58
-    ## 2 x               3.04    0.0614      49.5 1.41e-130
+    ## 1 (Intercept)     2.07    0.0882      23.5 6.01e- 65
+    ## 2 x               3.01    0.0623      48.4 2.93e-128
 
 ``` r
 lm(y ~ x, data = sim_df_nonconst) %>% broom::tidy()
@@ -106,8 +107,8 @@ lm(y ~ x, data = sim_df_nonconst) %>% broom::tidy()
     ## # A tibble: 2 x 5
     ##   term        estimate std.error statistic   p.value
     ##   <chr>          <dbl>     <dbl>     <dbl>     <dbl>
-    ## 1 (Intercept)     2.04    0.0885      23.1 9.60e- 64
-    ## 2 x               2.99    0.0598      49.9 1.99e-131
+    ## 1 (Intercept)     2.03    0.0966      21.0 4.95e- 57
+    ## 2 x               3.04    0.0683      44.6 2.08e-120
 
 ## Draw 1 Bootstrap sample
 
@@ -160,8 +161,8 @@ boot_samp(sim_df_nonconst) %>%
     ## # A tibble: 2 x 5
     ##   term        estimate std.error statistic   p.value
     ##   <chr>          <dbl>     <dbl>     <dbl>     <dbl>
-    ## 1 (Intercept)     2.10    0.108       19.4 1.49e- 51
-    ## 2 x               2.92    0.0657      44.5 3.95e-120
+    ## 1 (Intercept)     2.03    0.109       18.6 8.28e- 49
+    ## 2 x               3.04    0.0741      41.0 1.89e-112
 
 ## Many samples and analysis
 
@@ -182,16 +183,16 @@ boot_straps %>% pull(strap_sample) %>% .[[1]]
     ## # A tibble: 250 x 3
     ##         x   error      y
     ##     <dbl>   <dbl>  <dbl>
-    ##  1 -1.89  -0.738  -4.40 
-    ##  2 -1.89  -0.738  -4.40 
-    ##  3 -1.51   1.08   -1.46 
-    ##  4 -1.18   1.84    0.284
-    ##  5 -1.18   1.84    0.284
-    ##  6 -0.902 -0.527  -1.23 
-    ##  7 -0.902 -0.527  -1.23 
-    ##  8 -0.741  0.405   0.182
-    ##  9 -0.740 -0.0549 -0.275
-    ## 10 -0.674  1.48    1.46 
+    ##  1 -1.38  -1.25   -3.38 
+    ##  2 -1.38  -1.25   -3.38 
+    ##  3 -1.22  -0.652  -2.30 
+    ##  4 -1.00  -0.199  -1.21 
+    ##  5 -0.998 -0.621  -1.62 
+    ##  6 -0.998 -0.621  -1.62 
+    ##  7 -0.922 -0.363  -1.13 
+    ##  8 -0.869  0.0401 -0.568
+    ##  9 -0.736 -0.412  -0.619
+    ## 10 -0.599  0.218   0.422
     ## # ... with 240 more rows
 
 We have a dataframe (can use iterative analysis methods to analyze this)
@@ -239,8 +240,8 @@ boot_results %>%
     ## # A tibble: 2 x 3
     ##   term        mean_est sd_est
     ##   <chr>          <dbl>  <dbl>
-    ## 1 (Intercept)     2.04 0.0664
-    ## 2 x               2.99 0.0827
+    ## 1 (Intercept)     2.03 0.0545
+    ## 2 x               3.05 0.0996
 
 Look at the distributions
 
@@ -272,8 +273,8 @@ boot_results %>%
     ## # A tibble: 2 x 3
     ##   term        ci_lower ci_upper
     ##   <chr>          <dbl>    <dbl>
-    ## 1 (Intercept)     1.91     2.17
-    ## 2 x               2.83     3.15
+    ## 1 (Intercept)     1.93     2.14
+    ## 2 x               2.86     3.25
 
 ## Bootstrap using `modelr`
 
@@ -306,8 +307,8 @@ sim_df_nonconst %>%
     ## # A tibble: 2 x 3
     ##   term        mean_est sd_est
     ##   <chr>          <dbl>  <dbl>
-    ## 1 (Intercept)     2.04 0.0662
-    ## 2 x               2.99 0.0798
+    ## 1 (Intercept)     2.03 0.0548
+    ## 2 x               3.05 0.103
 
 Bootstrap works pretty well if your assumptions aren’t met
 (nonconst\_df) But what if the assumptions ARE met (const\_df)? Does it
@@ -334,5 +335,106 @@ sim_df_const %>%
     ## # A tibble: 2 x 3
     ##   term        mean_est sd_est
     ##   <chr>          <dbl>  <dbl>
-    ## 1 (Intercept)     1.96 0.0958
-    ## 2 x               3.04 0.0588
+    ## 1 (Intercept)     2.07 0.0870
+    ## 2 x               3.01 0.0656
+
+## Revisit NYC airbnb
+
+``` r
+data("nyc_airbnb")
+
+nyc_airbnb = 
+  nyc_airbnb %>% 
+  mutate(stars = review_scores_location / 2) %>% 
+  rename(
+    borough = neighbourhood_group,
+    neighborhood = neighbourhood) %>% 
+  filter(borough != "Staten Island") %>% 
+  select(price, stars, borough, neighborhood, room_type)
+```
+
+There is clearly some non constant variance
+
+``` r
+nyc_airbnb %>% 
+  ggplot(aes(x = stars, y = price)) +
+  geom_point()
+```
+
+    ## Warning: Removed 9962 rows containing missing values (geom_point).
+
+<img src="bootstraping_files/figure-gfm/unnamed-chunk-17-1.png" width="90%" />
+
+Still non constant variance with a few outliers
+
+``` r
+nyc_airbnb %>% 
+  filter(borough == "Manhattan") %>% 
+  drop_na(stars) %>% 
+  ggplot(aes(x = stars, y = price)) +
+  geom_point()
+```
+
+<img src="bootstraping_files/figure-gfm/unnamed-chunk-18-1.png" width="90%" />
+
+Want to get standard error for linear model - bootstrap This tell you
+the SE would be 6.64 WITHOUT assuming constant variance (higher than the
+SE under lm assumptions) Makes sense because of outliers, we know there
+should be more variability in the slope
+
+``` r
+airbnb_boot_results =  
+  nyc_airbnb %>% 
+    filter(borough == "Manhattan") %>% 
+    drop_na(stars) %>% 
+    bootstrap(1000, id = "strap_number") %>% 
+     mutate(
+      models = map(.x = strap, ~lm(price ~ stars, data = .x)),
+      results = map(models, broom::tidy)
+    ) %>% 
+    select(strap_number, results) %>% 
+    unnest(results) 
+
+airbnb_boot_results %>% 
+    group_by(term) %>% 
+    summarize(
+      mean_est = mean(estimate),
+      sd_est = sd(estimate)
+    )
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+    ## # A tibble: 2 x 3
+    ##   term        mean_est sd_est
+    ##   <chr>          <dbl>  <dbl>
+    ## 1 (Intercept)    -32.5  33.1 
+    ## 2 stars           42.9   6.72
+
+Compare this to the `lm` estimates This SE tells you that is should be
+4.78 assuming constant variance
+
+``` r
+ nyc_airbnb %>% 
+  filter(borough == "Manhattan") %>% 
+  drop_na(stars) %>%
+  lm(price ~ stars, data = .) %>% 
+  broom::tidy()
+```
+
+    ## # A tibble: 2 x 5
+    ##   term        estimate std.error statistic  p.value
+    ##   <chr>          <dbl>     <dbl>     <dbl>    <dbl>
+    ## 1 (Intercept)    -34.3     22.9      -1.50 1.35e- 1
+    ## 2 stars           43.3      4.78      9.07 1.39e-19
+
+``` r
+airbnb_boot_results %>% 
+  filter(term == "stars") %>% 
+  ggplot(aes(x = estimate)) +
+  geom_density()
+```
+
+<img src="bootstraping_files/figure-gfm/unnamed-chunk-21-1.png" width="90%" />
+
+Can use the same code to construct CI as above
