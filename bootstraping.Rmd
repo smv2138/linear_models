@@ -1,0 +1,213 @@
+---
+title: "Linear Regression"
+output: github_document
+---
+```{r}
+library(tidyverse)
+library(p8105.datasets)
+
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = 0.6,
+  out.width = "90%"
+)
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+
+## all plots i make will have the viridis color palette
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+
+```
+
+## Import Data 
+
+```{r}
+data("nyc_airbnb")
+
+nyc_airbnb = 
+  nyc_airbnb %>% 
+  mutate(stars = review_scores_location / 2) %>% 
+  rename(
+    borough = neighbourhood_group,
+    neighborhood = neighbourhood) %>% 
+  filter(borough != "Staten Island") %>% 
+  select(price, stars, borough, neighborhood, room_type)
+```
+
+## Fit a model
+How price of rental is related to the stars and borough
+```{r}
+nyc_airbnb %>% 
+  ggplot(aes(x = stars, y = price, color = borough)) +
+  geom_point()
+```
+
+```{r}
+fit = lm(price ~ stars + borough, data = nyc_airbnb)
+```
+
+let's look at the results
+
+```{r, include = FALSE}
+fit
+
+summary(fit)
+
+summary(fit)$coef
+
+fitted.values(fit)
+residuals(fit)
+
+```
+
+Let's look at the results better
+```{r}
+## get AIC and BIC and log likelihood (good when comparing models)
+broom::glance(fit)
+
+## structured as a dataframe 
+broom::tidy(fit) %>% 
+  select(-std.error, -statistic) %>% 
+  mutate(
+    term = str_replace(term, "borough", "Borough: ")
+  ) %>% 
+  knitr::kable(digits = 2)
+```
+
+
+## Be in control of factors
+
+Bronx is the reference group because of alphabetical order
+What is we want the most common one (most number of air bnbs) to be the ref group
+```{r}
+nyc_airbnb = 
+  nyc_airbnb %>% 
+  mutate(
+    borough = fct_infreq(borough),
+    room_type = fct_infreq(room_type)
+  )
+```
+
+Look at plot again
+
+```{r}
+## Now borough (x axis) is in order of frequency of air bnb
+nyc_airbnb %>% 
+  ggplot(aes(x = stars, y = price, color = borough)) +
+  geom_point()
+```
+
+Look at model again (different ref group - Manhattan is ref group)
+```{r}
+fit = lm(price ~ stars + borough, data = nyc_airbnb)
+broom::tidy(fit) ## betas are different
+broom::glance(fit) ## these values are the same
+```
+
+
+## Diagnositcs 
+
+Residuals 
+```{r}
+## added a column for residual values (how far off the fitted model was from the real data)
+nyc_airbnb %>% 
+  modelr::add_residuals(fit) %>% 
+    ggplot(aes(x = borough, y = resid)) +
+    geom_violin() +
+    ylim(-500, 1500) ##code to zoom in
+## bad residuals for manhattan and brooklyn
+
+nyc_airbnb %>% 
+  modelr::add_residuals(fit) %>% 
+  ggplot(aes(x = stars, y = resid)) +
+  geom_point() +
+  facet_wrap(. ~borough)
+## distribution of residuals gets bigger as the star count goes up 
+
+```
+
+
+## Hypothesis test
+
+This does t tests by defaut
+```{r}
+fit %>% 
+  broom::tidy()
+```
+
+But what about the significance of all of "borough" 
+F test or ANOVA
+
+```{r}
+fit_null = lm(price ~ stars, data = nyc_airbnb)
+fit_alt = lm(price ~ stars + borough, data = nyc_airbnb)
+
+anova(fit_null, fit_alt) %>% 
+  broom::tidy()
+```
+
+
+## Nest data, fit models
+
+Does the association between stars and price differ by borough?
+
+Interactions - this is formal and complicated
+```{r}
+fit = lm(price ~ stars * borough + room_type * borough, data = nyc_airbnb)
+
+broom::tidy(fit)
+```
+
+This is more exploratory but maybe more easier to understand
+
+```{r}
+nyc_airbnb %>% 
+  nest(data = -borough) %>% 
+  mutate(
+    models = map(data, ~lm(price ~ stars +room_type, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(-data, -models) %>% 
+  unnest(results) %>% 
+  filter(term != "(Intercept)") %>% ## don't care about intercept
+  select(borough, term, estimate) %>% 
+  pivot_wider(
+    names_from = "borough",
+    values_from = "estimate"
+  )
+```
+
+
+Let's nest even more....
+
+```{r}
+nyc_airbnb %>% 
+  filter(borough == "Manhattan") %>% 
+  nest(data = -neighborhood) %>% 
+  mutate(
+    models = map(data, ~lm(price ~ stars +room_type, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(-data, -models) %>% 
+  unnest(results) %>% 
+  filter(str_detect(term, "room_type")) %>% 
+  ggplot(aes(x = neighborhood, y = estimate)) +
+  geom_point() +
+  facet_wrap(. ~ term) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+
+
+
+
+
+
+
+

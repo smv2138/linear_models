@@ -1,0 +1,124 @@
+---
+title: "Cross Validation"
+output: github_document
+---
+```{r}
+library(tidyverse)
+library(modelr)
+library(mgcv)
+
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = 0.6,
+  out.width = "90%"
+)
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+
+## all plots i make will have the viridis color palette
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+
+```
+
+
+## Simulate Data
+
+```{r}
+nonlin_df = 
+  tibble(
+    id = 1:100,
+    x = runif(100, 0, 1),
+    y = 1 - 10 * (x - .3) ^ 2 + rnorm(100, 0, .3)
+  )
+
+```
+
+Look at data... it is non linear
+
+```{r}
+nonlin_df %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_point()
+```
+
+## Cross validation -- by hand
+
+Get training and testing datasets
+
+```{r}
+## sample 80 observations
+train_df = sample_n(nonlin_df, size = 80)
+
+## the remaining 20 goes into test dataset (observations in nonlin_df BUT not in training df)
+test_df = anti_join(nonlin_df, train_df, by = "id")
+```
+
+
+## Build models using training dataset
+
+```{r}
+linear_model = lm(y ~ x, data = train_df)
+#smooth model
+smooth_mod = gam(y ~ s(x), data = train_df)
+#very wiggly model
+wiggle_mod = gam(y ~s(x, k = 30), sp = 10e-6, data = train_df)
+```
+
+Can I see what I just did 
+"add_predictions" adds a column of fitted values 
+```{r}
+## too linear
+train_df %>% 
+  add_predictions(linear_model) %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_point() +
+  geom_line(aes(y = pred), color = "red")
+
+## good (looks like it will do best at predictioj accuracy)
+train_df %>% 
+  add_predictions(smooth_mod) %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_point() +
+  geom_line(aes(y = pred), color = "red")
+
+## too wiggly
+train_df %>% 
+  add_predictions(wiggle_mod) %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_point() +
+  geom_line(aes(y = pred), color = "red")
+```
+
+Add predictions for multiple models at the same time 
+```{r}
+train_df %>% 
+  gather_predictions(linear_model, smooth_mod, wiggle_mod) %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_point() +
+  geom_line(aes(y = pred), color = "red") +
+  facet_grid(. ~model)
+```
+
+Look at prediction accuracy (calculate root mean squared error) (have to look at test dataset)
+
+```{r}
+## largest
+rmse(linear_model, test_df)
+## smallest (best)
+rmse(smooth_mod, test_df)
+## middle
+rmse(wiggle_mod, test_df)
+```
+
+
+
+
+
+
+
