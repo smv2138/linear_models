@@ -5,14 +5,14 @@ Cross Validation
 library(tidyverse)
 ```
 
-    ## -- Attaching packages ------------------------------------------------------------------------------------------------------------------ tidyverse 1.3.0 --
+    ## -- Attaching packages ------------------------------------------------------------------------------------------------------------------- tidyverse 1.3.0 --
 
     ## v ggplot2 3.3.2     v purrr   0.3.4
     ## v tibble  3.0.3     v dplyr   1.0.2
     ## v tidyr   1.1.2     v stringr 1.4.0
     ## v readr   1.3.1     v forcats 0.5.0
 
-    ## -- Conflicts --------------------------------------------------------------------------------------------------------------------- tidyverse_conflicts() --
+    ## -- Conflicts ---------------------------------------------------------------------------------------------------------------------- tidyverse_conflicts() --
     ## x dplyr::filter() masks stats::filter()
     ## x dplyr::lag()    masks stats::lag()
 
@@ -151,21 +151,21 @@ look at test dataset)
 rmse(linear_model, test_df)
 ```
 
-    ## [1] 0.9146237
+    ## [1] 0.9764204
 
 ``` r
 ## smallest (best)
 rmse(smooth_mod, test_df)
 ```
 
-    ## [1] 0.3497416
+    ## [1] 0.3460459
 
 ``` r
 ## middle
 rmse(wiggle_mod, test_df)
 ```
 
-    ## [1] 0.4403312
+    ## [1] 0.4248057
 
 ## Cross validation using `modelr` package
 
@@ -187,18 +187,18 @@ cv_df %>% pull(train) %>% .[[1]] %>% as_tibble()
 ```
 
     ## # A tibble: 79 x 3
-    ##       id       x      y
-    ##    <int>   <dbl>  <dbl>
-    ##  1     1 0.306    0.834
-    ##  2     2 0.00137 -0.298
-    ##  3     3 0.817   -1.15 
-    ##  4     5 0.344    0.160
-    ##  5     6 0.230    0.722
-    ##  6     7 0.812   -1.38 
-    ##  7     8 0.854   -2.01 
-    ##  8     9 0.00226  0.170
-    ##  9    10 0.573    0.425
-    ## 10    11 0.420    0.345
+    ##       id      x      y
+    ##    <int>  <dbl>  <dbl>
+    ##  1     1 0.575   0.661
+    ##  2     2 0.178   0.841
+    ##  3     3 0.872  -1.74 
+    ##  4     4 0.0364  0.497
+    ##  5     5 0.872  -1.99 
+    ##  6     6 0.876  -2.25 
+    ##  7     9 0.821  -1.62 
+    ##  8    10 0.569   0.897
+    ##  9    11 0.817  -1.39 
+    ## 10    12 0.144   0.820
     ## # ... with 69 more rows
 
 ``` r
@@ -206,18 +206,18 @@ cv_df %>% pull(test) %>% .[[1]] %>% as_tibble()
 ```
 
     ## # A tibble: 21 x 3
-    ##       id        x       y
-    ##    <int>    <dbl>   <dbl>
-    ##  1     4 0.571     0.252 
-    ##  2    14 0.664    -0.0614
-    ##  3    16 0.542     0.427 
-    ##  4    20 0.948    -3.70  
-    ##  5    22 0.770    -1.45  
-    ##  6    23 0.215     1.29  
-    ##  7    34 0.638     0.599 
-    ##  8    35 0.000219 -0.446 
-    ##  9    42 0.183     1.54  
-    ## 10    44 0.274     0.561 
+    ##       id     x      y
+    ##    <int> <dbl>  <dbl>
+    ##  1     7 0.431  1.05 
+    ##  2     8 0.415  0.809
+    ##  3    17 0.270  0.994
+    ##  4    23 0.689  0.108
+    ##  5    32 0.135  1.20 
+    ##  6    33 0.142  0.995
+    ##  7    35 0.909 -3.43 
+    ##  8    39 0.960 -3.17 
+    ##  9    41 0.356  0.725
+    ## 10    45 0.249  0.488
     ## # ... with 11 more rows
 
 I want list columns of straight dataframes, not resamples
@@ -292,6 +292,131 @@ cv_df %>%
     ## # A tibble: 3 x 2
     ##   model  avg_rmse
     ##   <chr>     <dbl>
-    ## 1 linear    0.817
-    ## 2 smooth    0.345
-    ## 3 wiggly    0.411
+    ## 1 linear    0.846
+    ## 2 smooth    0.301
+    ## 3 wiggly    0.380
+
+## Try eith a real dataset
+
+Mutate function is for the change point model
+
+``` r
+child_growth = read_csv("./data/nepalese_children.csv") %>% 
+  mutate(
+    weight_cp = (weight > 7) * (weight - 7)
+  )
+```
+
+    ## Parsed with column specification:
+    ## cols(
+    ##   age = col_double(),
+    ##   sex = col_double(),
+    ##   weight = col_double(),
+    ##   height = col_double(),
+    ##   armc = col_double()
+    ## )
+
+Weight versus arm circumference
+
+``` r
+child_growth %>% 
+  ggplot(aes(x = weight, y = armc)) +
+  geom_point(alpha = 0.3)
+```
+
+<img src="cross_validation_files/figure-gfm/unnamed-chunk-16-1.png" width="90%" />
+
+Fit the models
+
+``` r
+linear_mod = lm(armc ~ weight, data = child_growth)
+pwlin_mod = lm(armc ~ weight + weight_cp, data = child_growth)
+smooth_mod = gam(armc ~ s(weight), data = child_growth)
+```
+
+Gather predicted values from each model and make a plot
+
+``` r
+child_growth %>% 
+  gather_predictions(linear_mod, pwlin_mod, smooth_mod) %>% 
+  ggplot(aes(x = weight, y = armc)) +
+  geom_point(alpha = 0.3) +
+  geom_line(aes(y = pred), color = "red") +
+  facet_grid(. ~ model)
+```
+
+<img src="cross_validation_files/figure-gfm/unnamed-chunk-18-1.png" width="90%" />
+
+Try to understand model fit using CV
+
+``` r
+cv_df = 
+  crossv_mc(child_growth, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+```
+
+See if I can fit the models to the splits
+
+``` r
+cv_df = 
+  cv_df %>% 
+  mutate(
+    linear_mod  = map(.x = train, ~lm(armc ~ weight, data = .x)),
+    pwlin_mod = map(.x = train, ~lm(armc ~ weight + weight_cp, data = .x)),
+    smooth_mod = map(.x = train, ~gam(armc ~s(weight), data = .x))
+  ) %>% 
+  mutate(
+    rmse_linear = map2_dbl(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_pwlin = map2_dbl(.x = pwlin_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_smooth = map2_dbl(.x = smooth_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+```
+
+Violin plot of RMSE These distributions are a lot closer than in the
+simulated data
+
+``` r
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_violin()
+```
+
+<img src="cross_validation_files/figure-gfm/unnamed-chunk-21-1.png" width="90%" />
+Jeff would pick piece wise linear model… because there is a clear
+improvement between linear and pwlin (and not so much between pwlin and
+the smooth model). The interpretations are a little more straight
+forward than in a smooth model
+
+Commute averages
+
+``` r
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  group_by(model) %>% 
+  summarize(avg_rmse = mean(rmse))
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+    ## # A tibble: 3 x 2
+    ##   model  avg_rmse
+    ##   <chr>     <dbl>
+    ## 1 linear    0.800
+    ## 2 pwlin     0.779
+    ## 3 smooth    0.775
